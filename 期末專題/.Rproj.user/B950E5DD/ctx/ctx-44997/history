@@ -1,0 +1,512 @@
+# 產生 .ics 檔案
+output$download_ics <- downloadHandler(
+filename = function() { "schedule.ics" },
+content = function(file) {
+schedule <- parsed_data()
+ics_content <- "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//My Schedule//EN\n"
+for (entry in schedule) {
+# 確保時間格式正確
+time_match <- str_match(entry$time, "(\\d{2}):(\\d{2})")
+if (is.na(time_match[1])) next  # 沒有時間則跳過
+start_hour <- as.numeric(time_match[2])
+start_minute <- as.numeric(time_match[3])
+# 轉換為 UTC 時間 (台灣 UTC+8，需要減 8 小時)
+start_time_local <- ymd_hms(sprintf("2025-03-25 %02d:%02d:00", start_hour, start_minute), tz = "Asia/Taipei")
+start_time_utc <- with_tz(start_time_local, "UTC")
+# 計算結束時間 (+1 小時)
+end_time_local <- start_time_local + hours(1)
+end_time_utc <- with_tz(end_time_local, "UTC")
+# 確保 `SUMMARY` 有內容，避免空白課程
+event_summary <- trimws(entry$course)
+if (event_summary == "") next  # 沒有課程則跳過
+ics_event <- paste0(
+"BEGIN:VEVENT\n",
+"DTSTART:", format(start_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"DTEND:", format(end_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"SUMMARY:", event_summary, "\n",
+"END:VEVENT\n"
+)
+ics_content <- paste0(ics_content, ics_event)
+}
+ics_content <- paste0(ics_content, "END:VCALENDAR")
+writeLines(ics_content, file)
+}
+)
+# 狀態顯示
+output$status <- renderText({
+if (is.null(input$pdf_file)) {
+"請上傳 PDF 課表"
+} else {
+paste("成功解析課表，共", length(parsed_data()), "堂課")
+}
+})
+}
+shinyApp(ui, server)
+library(shiny)
+library(pdftools)
+ui <- fluidPage(
+titlePanel("東華大學課表 .pdf 轉 .ics"),
+sidebarLayout(
+sidebarPanel(
+fileInput("pdf_file", "上傳你的課表 PDF", accept = ".pdf"),
+downloadButton("download_ics", "下載行事曆 (.ics)")
+),
+mainPanel(
+verbatimTextOutput("status")
+)
+)
+)
+library(pdftools)
+library(stringr)
+library(ical)
+server <- function(input, output) {
+# 讀取 PDF 並解析內容
+parsed_data <- reactive({
+req(input$pdf_file)
+text <- pdf_text(input$pdf_file$datapath)
+# 解析課表內容，這裡假設課表格式固定
+lines <- unlist(strsplit(text, "\n"))
+schedule <- list()
+for (line in lines) {
+if (str_detect(line, "[0-9]{2}:[0-9]{2}")) {  # 偵測時間
+parts <- unlist(strsplit(line, " "))
+time <- parts[1]
+course <- paste(parts[-1], collapse = " ")
+schedule <- append(schedule, list(list(time = time, course = course)))
+}
+}
+return(schedule)
+})
+# 產生 .ics 檔案
+library(lubridate)
+output$download_ics <- downloadHandler(
+filename = function() { "schedule.ics" },
+content = function(file) {
+schedule <- parsed_data()
+ics_content <- "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//My Schedule//EN\n"
+for (entry in schedule) {
+# 確保時間格式正確
+time_match <- str_match(entry$time, "(\\d{2}):(\\d{2})")
+if (is.na(time_match[1])) next  # 沒有時間則跳過
+start_hour <- as.numeric(time_match[2])
+start_minute <- as.numeric(time_match[3])
+# 轉換為 UTC 時間 (台灣 UTC+8，需要減 8 小時)
+start_time_local <- ymd_hms(sprintf("2025-03-25 %02d:%02d:00", start_hour, start_minute), tz = "Asia/Taipei")
+start_time_utc <- with_tz(start_time_local, "UTC")
+# 計算結束時間 (+1 小時)
+end_time_local <- start_time_local + hours(1)
+end_time_utc <- with_tz(end_time_local, "UTC")
+# 確保 `SUMMARY` 有內容，避免空白課程
+event_summary <- trimws(entry$course)
+if (event_summary == "") next  # 沒有課程則跳過
+ics_event <- paste0(
+"BEGIN:VEVENT\n",
+"DTSTART:", format(start_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"DTEND:", format(end_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"SUMMARY:", event_summary, "\n",
+"END:VEVENT\n"
+)
+ics_content <- paste0(ics_content, ics_event)
+}
+ics_content <- paste0(ics_content, "END:VCALENDAR")
+writeLines(ics_content, file)
+}
+)
+# 狀態顯示
+output$status <- renderText({
+if (is.null(input$pdf_file)) {
+"請上傳 PDF 課表"
+} else {
+paste("成功解析課表，共", length(parsed_data()), "堂課")
+}
+})
+}
+shinyApp(ui, server)
+library(pdftools)
+library(stringr)
+library(ical)
+server <- function(input, output) {
+# 定義節次對應的時間
+time_slots <- list(
+"1" = c("06:10", "07:00"),
+"2" = c("07:10", "08:00"),
+"3" = c("08:10", "09:00"),
+"4" = c("09:10", "10:00"),
+"5" = c("10:10", "11:00"),
+"6" = c("11:10", "12:00"),
+"7" = c("12:10", "13:00"),
+"8" = c("13:10", "14:00"),
+"9" = c("14:10", "15:00"),
+"10" = c("15:10", "16:00"),
+"11" = c("16:10", "17:00"),
+"12" = c("17:10", "18:00"),
+"13" = c("18:10", "19:00"),
+"14" = c("19:10", "20:00"),
+"15" = c("20:10", "21:00"),
+"16" = c("21:10", "22:00")
+)
+# 星期對應
+weekdays_map <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+# 讀取 PDF 並解析內容
+parsed_data <- reactive({
+req(input$pdf_file)
+text <- pdf_text(input$pdf_file$datapath)
+lines <- unlist(strsplit(text, "\n"))
+schedule <- list()
+current_time_slot <- NULL
+for (line in lines) {
+# 如果這一行是節次 (例如 "1 (06:10~07:00)")
+time_match <- str_match(line, "^(\\d+)\\s*\\((\\d{2}:\\d{2})~(\\d{2}:\\d{2})\\)")
+if (!is.na(time_match[1])) {
+current_time_slot <- time_match[2]
+next  # 跳過這行
+}
+# 如果這一行是課程名稱
+if (!is.null(current_time_slot) && str_trim(line) != "") {
+weekday_index <- (length(schedule) %% 7) + 1  # 循環對應星期
+weekday <- weekdays_map[weekday_index]
+schedule <- append(schedule, list(list(
+weekday = weekday,
+time_slot = current_time_slot,
+course = str_trim(line)
+)))
+}
+}
+return(schedule)
+})
+# 產生 .ics 檔案
+output$download_ics <- downloadHandler(
+filename = function() { "schedule.ics" },
+content = function(file) {
+schedule <- parsed_data()
+ics_content <- "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//My Schedule//EN\n"
+for (entry in schedule) {
+start_time <- time_slots[[entry$time_slot]][1]
+end_time <- time_slots[[entry$time_slot]][2]
+start_time_local <- ymd_hms(sprintf("2025-03-25 %s:00", start_time), tz = "Asia/Taipei")
+start_time_utc <- with_tz(start_time_local, "UTC")
+end_time_local <- ymd_hms(sprintf("2025-03-25 %s:00", end_time), tz = "Asia/Taipei")
+end_time_utc <- with_tz(end_time_local, "UTC")
+ics_event <- paste0(
+"BEGIN:VEVENT\n",
+"DTSTART:", format(start_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"DTEND:", format(end_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"SUMMARY:", entry$course, "\n",
+"RRULE:FREQ=WEEKLY;BYDAY=", substr(entry$weekday, 1, 2), "\n",
+"END:VEVENT\n"
+)
+ics_content <- paste0(ics_content, ics_event)
+}
+ics_content <- paste0(ics_content, "END:VCALENDAR")
+writeLines(ics_content, file)
+}
+)
+# 狀態顯示
+output$status <- renderText({
+if (is.null(input$pdf_file)) {
+"請上傳 PDF 課表"
+} else {
+paste("成功解析課表，共", length(parsed_data()), "堂課")
+}
+})
+}
+shinyApp(ui, server)
+library(pdftools)
+library(stringr)
+library(ical)
+server <- function(input, output) {
+# 定義節次對應的時間
+time_slots <- list(
+"1" = c("06:10", "07:00"),
+"2" = c("07:10", "08:00"),
+"3" = c("08:10", "09:00"),
+"4" = c("09:10", "10:00"),
+"5" = c("10:10", "11:00"),
+"6" = c("11:10", "12:00"),
+"7" = c("12:10", "13:00"),
+"8" = c("13:10", "14:00"),
+"9" = c("14:10", "15:00"),
+"10" = c("15:10", "16:00"),
+"11" = c("16:10", "17:00"),
+"12" = c("17:10", "18:00"),
+"13" = c("18:10", "19:00"),
+"14" = c("19:10", "20:00"),
+"15" = c("20:10", "21:00"),
+"16" = c("21:10", "22:00")
+)
+# 星期對應
+weekdays_map <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+# 讀取 PDF 並解析內容
+parsed_data <- reactive({
+req(input$pdf_file)
+text <- pdf_text(input$pdf_file$datapath)
+# 檢查是否正確讀取 PDF
+cat(text)
+lines <- unlist(strsplit(text, "\n"))
+schedule <- list()
+current_time_slot <- NULL
+weekday_index <- 0
+for (line in lines) {
+# 如果這一行是節次 (例如 "1 (06:10~07:00)")
+time_match <- str_match(line, "^(\\d+)\\s*\\((\\d{2}:\\d{2})~(\\d{2}:\\d{2})\\)")
+if (!is.na(time_match[1])) {
+current_time_slot <- time_match[2]
+weekday_index <- 0  # 重置星期索引
+next  # 跳過這行
+}
+# 確保是課程名稱，並排除空行
+if (!is.null(current_time_slot) && str_trim(line) != "") {
+weekday_index <- weekday_index + 1  # 遞增星期索引
+if (weekday_index > 7) next  # 超過7天則跳過
+weekday <- weekdays_map[weekday_index]
+schedule <- append(schedule, list(list(
+weekday = weekday,
+time_slot = current_time_slot,
+course = str_trim(line)
+)))
+}
+}
+return(schedule)
+})
+# 產生 .ics 檔案
+output$download_ics <- downloadHandler(
+filename = function() { "schedule.ics" },
+content = function(file) {
+schedule <- parsed_data()
+if (length(schedule) == 0) {
+writeLines("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//My Schedule//EN\nEND:VCALENDAR", file)
+return()
+}
+ics_content <- "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//My Schedule//EN\n"
+for (entry in schedule) {
+start_time <- time_slots[[entry$time_slot]][1]
+end_time <- time_slots[[entry$time_slot]][2]
+start_time_local <- ymd_hms(sprintf("2025-03-25 %s:00", start_time), tz = "Asia/Taipei")
+start_time_utc <- with_tz(start_time_local, "UTC")
+end_time_local <- ymd_hms(sprintf("2025-03-25 %s:00", end_time), tz = "Asia/Taipei")
+end_time_utc <- with_tz(end_time_local, "UTC")
+ics_event <- paste0(
+"BEGIN:VEVENT\n",
+"DTSTART:", format(start_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"DTEND:", format(end_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"SUMMARY:", entry$course, "\n",
+"RRULE:FREQ=WEEKLY;BYDAY=", substr(entry$weekday, 1, 2), "\n",
+"END:VEVENT\n"
+)
+ics_content <- paste0(ics_content, ics_event)
+}
+ics_content <- paste0(ics_content, "END:VCALENDAR")
+writeLines(ics_content, file)
+}
+)
+# 狀態顯示
+output$status <- renderText({
+if (is.null(input$pdf_file)) {
+"請上傳 PDF 課表"
+} else {
+paste("成功解析課表，共", length(parsed_data()), "堂課")
+}
+})
+}
+shinyApp(ui, server)
+library(pdftools)
+library(stringr)
+library(ical)
+server <- function(input, output) {
+library(stringr)
+library(lubridate)
+# 定義節次對應的時間
+time_slots <- list(
+"1" = c("06:10", "07:00"),
+"2" = c("07:10", "08:00"),
+"3" = c("08:10", "09:00"),
+"4" = c("09:10", "10:00"),
+"5" = c("10:10", "11:00"),
+"6" = c("11:10", "12:00"),
+"7" = c("12:10", "13:00"),
+"8" = c("13:10", "14:00"),
+"9" = c("14:10", "15:00"),
+"10" = c("15:10", "16:00"),
+"11" = c("16:10", "17:00"),
+"12" = c("17:10", "18:00"),
+"13" = c("18:10", "19:00"),
+"14" = c("19:10", "20:00"),
+"15" = c("20:10", "21:00"),
+"16" = c("21:10", "22:00")
+)
+# 星期對應
+weekdays_map <- c("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+# 讀取 PDF 並解析內容
+parsed_data <- reactive({
+req(input$pdf_file)
+text <- pdf_text(input$pdf_file$datapath)
+# 先檢查 PDF 內容是否正確讀取
+cat(text)
+lines <- unlist(strsplit(text, "\n"))
+schedule <- list()
+current_time_slot <- NULL
+for (line in lines) {
+# 偵測節次 (例如 "1 (06:10~07:00)")
+time_match <- str_match(line, "^(\\d+)\\s*\\((\\d{2}:\\d{2})~(\\d{2}:\\d{2})\\)")
+if (!is.na(time_match[1])) {
+current_time_slot <- time_match[2]  # 記錄當前節次
+next  # 跳過這行
+}
+# 確保 `current_time_slot` 存在，並排除空白行
+if (!is.null(current_time_slot) && str_trim(line) != "") {
+# 切割行，處理表格內不同星期的課程
+parts <- strsplit(line, "\\s{2,}")[[1]]  # 依據多個空格分割
+for (i in seq_along(parts)) {
+course_name <- str_trim(parts[i])
+if (course_name != "") {
+schedule <- append(schedule, list(list(
+weekday = weekdays_map[i],  # 依序對應到星期
+time_slot = current_time_slot,
+course = course_name
+)))
+}
+}
+}
+}
+return(schedule)
+})
+# 產生 .ics 檔案
+output$download_ics <- downloadHandler(
+filename = function() { "schedule.ics" },
+content = function(file) {
+schedule <- parsed_data()
+if (length(schedule) == 0) {
+writeLines("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//My Schedule//EN\nEND:VCALENDAR", file)
+return()
+}
+ics_content <- "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//My Schedule//EN\n"
+for (entry in schedule) {
+start_time <- time_slots[[entry$time_slot]][1]
+end_time <- time_slots[[entry$time_slot]][2]
+start_time_local <- ymd_hms(sprintf("2025-03-25 %s:00", start_time), tz = "Asia/Taipei")
+start_time_utc <- with_tz(start_time_local, "UTC")
+end_time_local <- ymd_hms(sprintf("2025-03-25 %s:00", end_time), tz = "Asia/Taipei")
+end_time_utc <- with_tz(end_time_local, "UTC")
+ics_event <- paste0(
+"BEGIN:VEVENT\n",
+"DTSTART:", format(start_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"DTEND:", format(end_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"SUMMARY:", entry$course, "\n",
+"RRULE:FREQ=WEEKLY;BYDAY=", entry$weekday, "\n",
+"END:VEVENT\n"
+)
+ics_content <- paste0(ics_content, ics_event)
+}
+ics_content <- paste0(ics_content, "END:VCALENDAR")
+writeLines(ics_content, file)
+}
+)
+# 狀態顯示
+output$status <- renderText({
+if (is.null(input$pdf_file)) {
+"請上傳 PDF 課表"
+} else {
+paste("成功解析課表，共", length(parsed_data()), "堂課")
+}
+})
+}
+shinyApp(ui, server)
+library(pdftools)
+library(stringr)
+library(ical)
+server <- function(input, output) {
+# 讀取 PDF 並解析內容
+parsed_data <- reactive({
+req(input$pdf_file)
+text <- pdf_text(input$pdf_file$datapath)
+# 解析課表內容，這裡假設課表格式固定
+lines <- unlist(strsplit(text, "\n"))
+schedule <- list()
+for (line in lines) {
+if (str_detect(line, "[0-9]{2}:[0-9]{2}")) {  # 偵測時間
+parts <- unlist(strsplit(line, " "))
+time <- parts[1]
+course <- paste(parts[-1], collapse = " ")
+schedule <- append(schedule, list(list(time = time, course = course)))
+}
+}
+return(schedule)
+})
+# 產生 .ics 檔案
+library(lubridate)
+output$download_ics <- downloadHandler(
+filename = function() { "schedule.ics" },
+content = function(file) {
+schedule <- parsed_data()
+ics_content <- "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//My Schedule//EN\n"
+for (entry in schedule) {
+# 確保時間格式正確
+time_match <- str_match(entry$time, "(\\d{2}):(\\d{2})")
+if (is.na(time_match[1])) next  # 沒有時間則跳過
+start_hour <- as.numeric(time_match[2])
+start_minute <- as.numeric(time_match[3])
+# 轉換為 UTC 時間 (台灣 UTC+8，需要減 8 小時)
+start_time_local <- ymd_hms(sprintf("2025-03-25 %02d:%02d:00", start_hour, start_minute), tz = "Asia/Taipei")
+start_time_utc <- with_tz(start_time_local, "UTC")
+# 計算結束時間 (+1 小時)
+end_time_local <- start_time_local + hours(1)
+end_time_utc <- with_tz(end_time_local, "UTC")
+# 確保 `SUMMARY` 有內容，避免空白課程
+event_summary <- trimws(entry$course)
+if (event_summary == "") next  # 沒有課程則跳過
+ics_event <- paste0(
+"BEGIN:VEVENT\n",
+"DTSTART:", format(start_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"DTEND:", format(end_time_utc, "%Y%m%dT%H%M%SZ"), "\n",
+"SUMMARY:", event_summary, "\n",
+"END:VEVENT\n"
+)
+ics_content <- paste0(ics_content, ics_event)
+}
+ics_content <- paste0(ics_content, "END:VCALENDAR")
+writeLines(ics_content, file)
+}
+)
+# 狀態顯示
+output$status <- renderText({
+if (is.null(input$pdf_file)) {
+"請上傳 PDF 課表"
+} else {
+paste("成功解析課表，共", length(parsed_data()), "堂課")
+}
+})
+}
+shinyApp(ui, server)
+library(shiny)
+library(pdftools)
+ui <- fluidPage(
+titlePanel("東華大學課表.pdf 轉 .ics"),
+sidebarLayout(
+sidebarPanel(
+fileInput("pdf_file", "上傳你的課表 PDF", accept = ".pdf"),
+downloadButton("download_ics", "下載行事曆 (.ics)")
+),
+mainPanel(
+verbatimTextOutput("status")
+)
+)
+)
+ui <- page_sidebar(
+title = "title panel",
+sidebar = sidebar("Sidebar"),
+card(
+card_header("Card header"),
+"Card body"
+)
+)
+runApp()
+source("app.R")
+library(shiny)
+source("ui.R")
+source("server.R")
+shinyApp(ui, server)
+shiny::runApp()
+if (!require("pdftools")) install.packages("pdftools")
+if (!require("readr")) install.packages("readr")
+install.packages("pdftools")
+install.packages("readr")
