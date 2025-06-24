@@ -1,87 +1,122 @@
 
+# 安裝並載入必要的套件
 install.packages("pdftools")
-install.packages("readr")
-install.packages("rstudioapi")
-install.packages("lubridate")
-
-# 安裝必要套件（只需要安裝一次）
-# 安裝必要套件（只需要安裝一次）
-install.packages(c("pdftools", "readr", "stringr"))
+install.packages("tidyverse")
 library(pdftools)
-library(readr)
-library(stringr)
+library(tidyverse)
 
-# 1. 讀取 PDF 檔案
-pdf_file <- "個人課表.pdf" # 改成你的檔案路徑
-pdf_text_data <- pdf_text(pdf_file)
+# 指定 PDF 檔案的路徑
+pdf_file <- "個人課表.pdf"  # 將 "your_file.pdf" 替換為您的檔案名稱
 
-# 2. 將PDF每頁內容以行為單位切開
-lines <- strsplit(pdf_text_data, "\n")[[1]]
+# 從 PDF 中提取文字
+text <- pdf_text(pdf_file)
 
-# 3. 找出表格開始的地方
-# 範例中通常會有「節次(時間) 星期一 星期二 ...」這種字眼，找到它
-start_index <- which(grepl("節次", lines))
+# 由於 pdf_text 會將每一頁作為一個元素返回，我們假設課表在第一頁
+text <- text[[1]]
 
-# 只保留課表部分的資料（課表結束後通常會有備註，不需要）
-table_lines <- lines[(start_index + 1):length(lines)]
+# 將文字分割成行
+lines <- str_split(text, "\n")[[1]]
 
-# 4. 手動設定星期欄
-weekdays <- c("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+# 檢視提取的文字
+print(lines)
 
-# 5. 手動設定節次時間
-periods <- c("06:10~07:00", "07:10~08:00", "08:10~09:00", 
-             "09:10~10:00", "10:10~11:00", "11:10~12:00",
-             "12:10~13:00", "13:10~14:00", "14:10~15:00",
-             "15:10~16:00", "16:10~17:00", "17:10~18:00",
-             "18:10~19:00", "19:10~20:00", "20:10~21:00",
-             "21:10~22:00")
+# 範例：清理和提取資料 (這部分需要根據您的 PDF 輸出來調整)
+# 假設課表資料從第 X 行開始，到第 Y 行結束
+start_row <- 8  # 根據您的 PDF 調整
+end_row <- 22    # 根據您的 PDF 調整
 
-# 6. 準備儲存課表的資料框
-timetable <- data.frame(
-  節次時間 = periods,
-  星期一 = rep("", length(periods)),
-  星期二 = rep("", length(periods)),
-  星期三 = rep("", length(periods)),
-  星期四 = rep("", length(periods)),
-  星期五 = rep("", length(periods)),
-  星期六 = rep("", length(periods)),
-  星期日 = rep("", length(periods)),
-  stringsAsFactors = FALSE
+schedule_lines <- lines[start_row:end_row]
+
+# 將文字轉換為表格 (這是一個簡化的範例，您可能需要更複雜的邏輯)
+schedule_data <- str_split_fixed(schedule_lines, "\\s{2,}", n = 8)  # 使用兩個或更多空格分割
+schedule_df <- as.data.frame(schedule_data, stringsAsFactors = FALSE)
+colnames(schedule_df) <- c("節次(時間)", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+
+print(schedule_df)
+
+
+
+
+# 載入 lubridate 以便於處理日期和時間
+install.packages("lubridate")
+library(lubridate)
+
+# 輔助函數：將星期幾轉換為對應的日期 (需要根據您的課表開始日期進行調整)
+get_dates_for_weekdays <- function(start_date, weekdays = c("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")) {
+  dates <- c()
+  for (i in seq_along(weekdays)) {
+    day_of_week <- weekdays[i]
+    if (!is.na(day_of_week) && day_of_week != "") {
+      day_num <- which(c("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日") == day_of_week)
+      dates <- c(dates, start_date + days(day_num - wday(start_date, week_start = 1)))
+    } else {
+      dates <- c(dates, NA)
+    }
+  }
+  return(dates)
+}
+
+# 假設您的學期開始於 2024 年 9 月 2 日 (星期一)
+start_date <- as.Date("2024-09-02")  # 請根據您的實際開始日期更改
+dates_of_week <- get_dates_for_weekdays(start_date)
+
+# 輔助函數：將時間字串轉換為開始和結束時間
+parse_time_slot <- function(time_str) {
+  times <- str_match(time_str, "(\\d{2}):(\\d{2})-(\\d{2}):(\\d{2})")
+  if (!is.na(times[1])) {
+    start_time <- paste(times[2], times[3], sep = "")
+    end_time <- paste(times[4], times[5], sep = "")
+    return(c(start_time, end_time))
+  } else {
+    return(c(NA, NA))
+  }
+}
+
+# 產生 ICS 內容
+ics_content <- c(
+  "BEGIN:VCALENDAR",
+  "VERSION:2.0",
+  "PRODID:-//YourOrganization//YourAppName//EN",
+  "CALSCALE:GREGORIAN"
 )
 
-# 7. 逐行解析，填入課表
-current_period <- 0
-
-for (line in table_lines) {
-  line <- str_trim(line)  # 去除前後空白
-  if (line == "") next  # 空行跳過
+for (row in 1:nrow(schedule_df)) {
+  time_slot <- schedule_df[row, 1]
+  times <- parse_time_slot(time_slot)
+  start_time <- times[1]
+  end_time <- times[2]
   
-  # 如果是節次時間 (有小括號時間)
-  if (grepl("\\(.*\\)", line)) {
-    current_period <- current_period + 1
-    next
-  }
-  
-  # 如果是課程內容：根據位置大概估計星期
-  # 假設不同課程是以固定間距排列的（簡單估算）
-  courses <- str_split_fixed(line, "\\s{2,}", n = 8) # 以2個以上空白切割
-  
-  if (ncol(courses) >= 2) {
-    for (i in 2:8) { # 從星期一到星期日
-      content <- str_trim(courses[i])
-      if (content != "") {
-        # 抓取第一行（如果有換行符號）
-        first_line <- strsplit(content, "\\s")[[1]][1]
-        timetable[current_period, i] <- first_line
+  for (col in 2:ncol(schedule_df)) {
+    day_of_week <- colnames(schedule_df)[col]
+    course_info <- schedule_df[row, col]
+    
+    if (!is.na(course_info) && course_info != "") {
+      # 從課程資訊中提取課程名稱和地點
+      course_details <- str_split(course_info, "\n")[[1]]
+      course_name <- course_details[1]
+      location <- course_details[length(course_details)]  # 假設地點在最後一行
+      
+      event_date <- dates_of_week[col - 1]
+      if (!is.na(event_date)) {
+        dtstart <- paste0(format(event_date, "%Y%m%d"), "T", start_time, "00")
+        dtend <- paste0(format(event_date, "%Y%m%d"), "T", end_time, "00")
+        uid <- paste0(digest::digest(paste(course_name, dtstart, dtend)), "@yourdomain.com")  # 產生唯一ID
+        
+        ics_content <- c(ics_content,
+                         "BEGIN:VEVENT",
+                         paste0("UID:", uid),
+                         paste0("DTSTAMP:", format(Sys.time(), "%Y%m%dT%H%M%SZ")),
+                         paste0("DTSTART:", dtstart),
+                         paste0("DTEND:", dtend),
+                         paste0("SUMMARY:", course_name),
+                         paste0("LOCATION:", location),
+                         "END:VEVENT")
       }
     }
   }
 }
 
-# 8. 刪除整行都是空白的節次（如果有）
-timetable <- timetable[rowSums(timetable[, -1] != "") > 0, ]
+ics_content <- c(ics_content, "END:VCALENDAR")
 
-# 9. 輸出CSV
-write_csv(timetable, "課表轉換結果.csv")
-
-cat("✅ 成功轉成課表 CSV 檔案！存成 '課表轉換結果.csv'。\n")
+# 將 ICS 內容寫入檔案
+writeLines(ics_content, "schedule.ics")

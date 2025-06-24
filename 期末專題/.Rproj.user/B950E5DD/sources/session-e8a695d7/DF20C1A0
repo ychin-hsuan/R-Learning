@@ -1,6 +1,6 @@
 {
     "id": "DF20C1A0",
-    "path": "~/Downloads/UI_R/app.R",
+    "path": "~/Downloads/期末專題/app.R",
     "project_path": "app.R",
     "type": "r_source",
     "hash": "0",
@@ -13,7 +13,7 @@
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "6,0",
+        "cursorPosition": "0,0",
         "scrollLine": "0"
     },
     "folds": "",
